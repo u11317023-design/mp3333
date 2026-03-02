@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>Morandi Blue MP3 Player</title>
+    <style>
+        :root {
+            --bg-color: #e2e8f0;
+            --panel-color: #b9c9d6; /* 莫蘭迪藍主色 */
+            --accent-color: #7d9cb5; /* 深莫蘭迪藍 */
+            --text-color: #546a7b;
+            --white: #f8fafc;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .player-container {
+            background-color: var(--panel-color);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            width: 500px;
+            text-align: center;
+            color: var(--text-color);
+        }
+
+        /* 巨大的等化器畫布 */
+        #visualizer {
+            width: 100%;
+            height: 150px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background: var(--white);
+            border: none;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--text-color);
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .slider-group {
+            margin: 15px 0;
+            text-align: left;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: var(--accent-color);
+        }
+
+        label {
+            font-size: 0.9rem;
+            display: block;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="player-container">
+    <h2>Music Player</h2>
+    
+    <canvas id="visualizer"></canvas>
+
+    <audio id="main-audio" src="111.mp3"></audio>
+
+    <div class="slider-group">
+        <input type="range" id="progress-bar" value="0" max="100">
+        <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
+            <span id="current-time">0:00</span>
+            <span id="duration">0:00</span>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button onclick="rewind()">« 倒轉</button>
+        <button id="play-pause" onclick="togglePlay()">播放</button>
+        <button onclick="fastForward()">快轉 »</button>
+    </div>
+
+    <div class="slider-group">
+        <label>音量</label>
+        <input type="range" id="volume-control" min="0" max="1" step="0.1" value="1">
+    </div>
+
+    <div class="slider-group">
+        <label>播放速度: <span id="speed-val">1.0</span>x</label>
+        <input type="range" id="speed-control" min="0.33" max="3" step="0.1" value="1">
+    </div>
+</div>
+
+<script>
+    const audio = document.getElementById('main-audio');
+    const playBtn = document.getElementById('play-pause');
+    const speedControl = document.getElementById('speed-control');
+    const speedVal = document.getElementById('speed-val');
+    const progressBar = document.getElementById('progress-bar');
+    const volumeControl = document.getElementById('volume-control');
+    const canvas = document.getElementById('visualizer');
+    const ctx = canvas.getContext('2d');
+
+    // --- 音訊視覺化設定 ---
+    let audioCtx, analyser, source, bufferLength, dataArray;
+
+    function initVisualizer() {
+        if (audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        source = audioCtx.createMediaElementSource(audio);
+        source.connect(analyser);
+        analyser.connect(audioCtx.destination);
+        analyser.fftSize = 64; 
+        bufferLength = analyser.frequencyBinCount;
+        dataArray = new Uint8Array(bufferLength);
+        draw();
+    }
+
+    function draw() {
+        requestAnimationFrame(draw);
+        analyser.getByteFrequencyData(dataArray);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const barWidth = (canvas.width / bufferLength) * 2.5;
+        let x = 0;
+        for(let i = 0; i < bufferLength; i++) {
+            const barHeight = dataArray[i] / 2;
+            ctx.fillStyle = `rgb(125, 156, 181)`; // 莫蘭迪藍色調
+            ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+            x += barWidth + 2;
+        }
+    }
+
+    // --- 播放控制 ---
+    function togglePlay() {
+        initVisualizer();
+        if (audio.paused) {
+            audio.play();
+            playBtn.innerText = "暫停";
+        } else {
+            audio.pause();
+            playBtn.innerText = "播放";
+        }
+    }
+
+    function fastForward() { audio.currentTime += 5; }
+    function rewind() { audio.currentTime -= 5; }
+
+    // --- 滑桿事件 ---
+    speedControl.oninput = (e) => {
+        const val = parseFloat(e.target.value);
+        audio.playbackRate = val;
+        speedVal.innerText = val.toFixed(1);
+    };
+
+    volumeControl.oninput = (e) => {
+        audio.volume = e.target.value;
+    };
+
+    // 時間軸更新
+    audio.ontimeupdate = () => {
+        const pct = (audio.currentTime / audio.duration) * 100;
+        progressBar.value = pct || 0;
+        document.getElementById('current-time').innerText = formatTime(audio.currentTime);
+        if(!isNaN(audio.duration)) document.getElementById('duration').innerText = formatTime(audio.duration);
+    };
+
+    progressBar.oninput = (e) => {
+        const seekTime = (e.target.value / 100) * audio.duration;
+        audio.currentTime = seekTime;
+    };
+
+    function formatTime(seconds) {
+        const min = Math.floor(seconds / 60);
+        const sec = Math.floor(seconds % 60);
+        return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+    }
+
+    // --- 鍵盤控制 ---
+    window.addEventListener('keydown', (e) => {
+        switch(e.key) {
+            case 'ArrowRight': fastForward(); break;
+            case 'ArrowLeft': rewind(); break;
+            case 'ArrowUp': 
+                speedControl.value = parseFloat(speedControl.value) + 0.1;
+                speedControl.dispatchEvent(new Event('input'));
+                break;
+            case 'ArrowDown': 
+                speedControl.value = parseFloat(speedControl.value) - 0.1;
+                speedControl.dispatchEvent(new Event('input'));
+                break;
+        }
+    });
+</script>
+
+</body>
+</html>
